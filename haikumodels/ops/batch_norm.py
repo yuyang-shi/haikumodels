@@ -87,14 +87,14 @@ class BatchNorm(hk.Module):
     self.eps = eps
     self.scale_init = None if not create_scale else scale_init
     self.offset_init = None if not create_offset else offset_init
-    self.mean_init = mean_init
-    self.var_init = var_init
+    self.mean_init = mean_init if mean_init is not None else jnp.zeros
+    self.var_init = var_init if var_init is not None else jnp.ones
     self.axis = axis
     self.cross_replica_axis = cross_replica_axis
     self.cross_replica_axis_index_groups = cross_replica_axis_index_groups
     self.channel_index = utils.get_channel_index(data_format)
-    self.mean_ema = hk.ExponentialMovingAverage(decay_rate, name="mean_ema")
-    self.var_ema = hk.ExponentialMovingAverage(decay_rate, name="var_ema")
+    self.mean_ema = hk.ExponentialMovingAverage(decay_rate, name="mean_ema", init_avg=self.mean_init)
+    self.var_ema = hk.ExponentialMovingAverage(decay_rate, name="var_ema", init_avg=self.var_init)
 
   def __call__(
       self,
@@ -159,15 +159,8 @@ class BatchNorm(hk.Module):
     w_dtype = inputs.dtype
 
     if is_training:
-      if self.mean_init is not None:
-        self.mean_ema(self.mean_init(w_shape, w_dtype), avg_init=True)
-        self.mean_init = None
-      if self.var_init is not None:
-        self.var_ema(self.var_init(w_shape, w_dtype), avg_init=True)
-        self.var_init = None
-      else:
-        self.mean_ema(mean)
-        self.var_ema(var)
+      self.mean_ema(mean)
+      self.var_ema(var)
 
     if self.create_scale:
       scale = hk.get_parameter("scale", w_shape, w_dtype, self.scale_init)

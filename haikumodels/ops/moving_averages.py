@@ -26,6 +26,7 @@ class ExponentialMovingAverage(hk.Module):
       zero_debias: bool = True,
       warmup_length: int = 0,
       name: Optional[str] = None,
+      init_avg=jnp.zeros
   ):
     """Initializes an ExponentialMovingAverage module.
         Args:
@@ -42,6 +43,7 @@ class ExponentialMovingAverage(hk.Module):
     self.decay = decay
     self.warmup_length = warmup_length
     self.zero_debias = zero_debias
+    self.init_avg = init_avg
 
     if warmup_length < 0:
       raise ValueError(
@@ -56,8 +58,7 @@ class ExponentialMovingAverage(hk.Module):
   def __call__(
       self,
       value: jnp.ndarray,
-      update_stats: bool = True,
-      avg_init: bool = False,
+      update_stats: bool = True
   ) -> jnp.ndarray:
     """Updates the EMA and returns the new value.
         Args:
@@ -66,8 +67,6 @@ class ExponentialMovingAverage(hk.Module):
           update_stats: A Boolean, whether to update the internal state
             of this object to reflect the input value. When ``update_stats`` is False
             the internal stats will remain unchanged.
-          avg_init: A Boolean, to initialize ``average`` when ``avg_init`` is True
-            from pretrained weights with tensorflow dimension ordering.
 
         Returns:
           The exponentially weighted average of the input value.
@@ -85,7 +84,7 @@ class ExponentialMovingAverage(hk.Module):
       decay = jax.lax.select(counter <= 0, 0.0, decay)
 
     one = jnp.ones([], value.dtype)
-    hidden = hk.get_state("hidden", value.shape, value.dtype, init=jnp.zeros)
+    hidden = hk.get_state("hidden", value.shape, value.dtype, init=self.init_avg)
     hidden = hidden * decay + value * (one - decay)
 
     average = hidden
@@ -95,10 +94,7 @@ class ExponentialMovingAverage(hk.Module):
     if update_stats:
       hk.set_state("counter", counter)
       hk.set_state("hidden", hidden)
-      if avg_init:
-        hk.set_state("average", value)
-      else:
-        hk.set_state("average", average)
+      hk.set_state("average", average)
 
     return average
 
